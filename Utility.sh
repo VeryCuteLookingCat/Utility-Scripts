@@ -364,7 +364,7 @@ deleteUser() {
     read -p "Enter username to delete (0 to cancel): " u
     [[ "$u" == "0" ]] && return
     if id "$u" &>/dev/null; then
-        sudo deluser "$u"
+        deluser "$u"
         read -p "User deleted. Press enter..."
     else
         read -p "User not found. Press enter..."
@@ -376,8 +376,8 @@ addUser() {
     [[ "$u" == "0" ]] && return
 
     password=$(openssl rand -base64 12)
-    sudo adduser --disabled-password --gecos "" "$u"
-    echo "$u:$password" | sudo chpasswd
+    adduser --disabled-password --gecos "" "$u"
+    echo "$u:$password" | chpasswd
 
     echo "Created user: $u"
     echo "Password: $password"
@@ -386,7 +386,7 @@ addUser() {
 makeAdmin() {
     read -p "Enter username: " u
     if id "$u" &>/dev/null; then
-        sudo usermod -aG sudo "$u"
+        usermod -aG sudo "$u"
         echo "$u is now admin."
         read -p "Press enter..."
     else
@@ -397,7 +397,7 @@ makeAdmin() {
 removeAdmin() {
     read -p "Enter username: " u
     if id "$u" &>/dev/null; then
-        sudo deluser "$u" sudo
+        deluser "$u" sudo
         echo "$u is no longer admin."
         read -p "Press enter..."
     else
@@ -408,7 +408,7 @@ removeAdmin() {
 disableUser() {
     read -p "Enter username: " u
     if id "$u" &>/dev/null; then
-        sudo usermod -L "$u"
+        usermod -L "$u"
         echo "Disabled $u"
         read -p "Press enter..."
     else
@@ -419,7 +419,7 @@ disableUser() {
 enableUser() {
     read -p "Enter username: " u
     if id "$u" &>/dev/null; then
-        sudo usermod -U "$u"
+        usermod -U "$u"
         echo "Enabled $u"
         read -p "Press enter..."
     else
@@ -431,7 +431,7 @@ resetUserPassword() {
     read -p "Enter username: " u
     if id "$u" &>/dev/null; then
         password=$(openssl rand -base64 12)
-        echo "$u:$password" | sudo chpasswd
+        echo "$u:$password" | chpasswd
         echo "New password for $u: $password"
         read -p "Press enter..."
     else
@@ -441,7 +441,7 @@ resetUserPassword() {
 }
 expirePasswords() {
     for u in $(awk -F: '$3 >= 1000 {print $1}' /etc/passwd); do
-        sudo chage -M 90 "$u"
+        chage -M 90 "$u"
     done
     echo "All users now have expiring passwords."
     read -p "Press enter..."
