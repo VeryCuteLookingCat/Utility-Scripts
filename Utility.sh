@@ -1,3 +1,5 @@
+#!/bin/bash
+
 MAGENTA="\033[95m"
 RESET="\033[0m"
 
@@ -5,14 +7,14 @@ showMainMenu() {
     while true; do
         clear
         echo -e "${MAGENTA}====== Linux Utility Script ======${RESET}"
-        echo -e "${MAGENTA}[1]${RESET} Baseline security policy (auto)"
+        echo -e "${MAGENTA}[1]${RESET} Apply baseline hardening"
         echo -e "${MAGENTA}[2]${RESET} Manage user accounts"
-        echo -e "${MAGENTA}[3]${RESET} User rights assignments"
-        echo -e "${MAGENTA}[4]${RESET} Audit policy"
-        echo -e "${MAGENTA}[5]${RESET} Services and startup"
-        echo -e "${MAGENTA}[6]${RESET} Firewall and network"
-        echo -e "${MAGENTA}[7]${RESET} Hash File"
-        echo -e "${MAGENTA}[8]${RESET} Silly Credits"
+        echo -e "${MAGENTA}[3]${RESET} Review privilege assignments"
+        echo -e "${MAGENTA}[4]${RESET} Audit system security"
+        echo -e "${MAGENTA}[5]${RESET} Manage services & startup"
+        echo -e "${MAGENTA}[6]${RESET} Firewall & network configuration"
+        echo -e "${MAGENTA}[7]${RESET} File hashing utility"
+        echo -e "${MAGENTA}[8]${RESET} Credits"
         echo -e "${MAGENTA}[0]${RESET} Exit"
         echo -e "${MAGENTA}====================================${RESET}"
 
@@ -48,7 +50,8 @@ manageUsers() {
         echo -e "${MAGENTA}[?]${RESET} Users:"
         echo ""
 
-        cut -d':' -f1 /etc/passwd | sort
+        printUsers;;
+
         echo ""
         echo -e "${MAGENTA}-------------------------------------${RESET}"
 
@@ -67,15 +70,55 @@ manageUsers() {
     done
 }
 Credits() {
-	clear
-	echo -e "${MAGENTA}---------= User Management =---------${RESET}"
+    clear
+    echo -e "${MAGENTA}---------= User Management =---------${RESET}"
     echo -e "${MAGENTA}[+]${RESET} Github ( VeryCuteLookingCat ) - Helped with UI"
     echo -e "https://github.com/veryCuteLookingCat"
     echo -e "${MAGENTA}[+]${RESET} My Cat - Wrote entire backend"
     echo -e "N/A"
     echo -e "${MAGENTA}-------------------------------------${RESET}"
 }
+printUsers() {
+    users=$(awk -F: '$3 >= 1000 {print $1}' /etc/passwd)
 
+    echo ""
+    for user in $users; do
+        tags=()
+
+        if id -nG "$user" | grep -Eq "(sudo|adm)"; then
+            tags+=("Elevated")
+        fi
+
+        shadow=$(grep "^$user:" /etc/shadow)
+        pwField=$(echo "$shadow" | cut -d: -f2)
+
+        if [[ $pwField == '!'* ]] || [[ $pwField == '*' ]]; then
+            tags+=("Disabled")
+        fi
+
+        expireField=$(echo "$shadow" | cut -d: -f5)
+        if [[ $expireField -eq -1 ]]; then
+            tags+=("Password Never Expires")
+        fi
+
+        minDays=$(echo "$shadow" | cut -d: -f4)
+        if [[ $minDays -ge 99999 ]]; then
+            tags+=("Cannot Change Password")
+        fi
+
+        status=$(passwd -S "$user" | awk '{print $2}')
+        if [[ $status == "L" ]]; then
+            tags+=("Account Locked")
+        fi
+
+        if [[ ${#tags[@]} -eq 0 ]]; then
+            echo "$user = No Flags"
+        else
+            echo "$user = ${tags[*]}"
+        fi
+    done
+    echo ""
+}
 deleteUser() {
     read -p "Enter username to delete (0 to cancel): " u
     [[ "$u" == "0" ]] && return
