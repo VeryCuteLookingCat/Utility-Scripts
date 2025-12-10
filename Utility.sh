@@ -383,7 +383,7 @@ deleteUser() {
         read -p "User deleted. Press enter..."
     else
         read -p "User not found. Press enter..."
-        deleteUser()
+        deleteUser
     fi
 }
 addUser() {
@@ -406,7 +406,7 @@ makeAdmin() {
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        makeAdmin()
+        makeAdmin
     fi
 }
 removeAdmin() {
@@ -417,7 +417,7 @@ removeAdmin() {
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        removeAdmin()
+        removeAdmin
     fi
 }
 disableUser() {
@@ -428,7 +428,7 @@ disableUser() {
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        disableUser()
+        disableUser
     fi
 }
 enableUser() {
@@ -439,7 +439,7 @@ enableUser() {
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        enableUser()
+        enableUser
     fi
 }
 
@@ -463,7 +463,7 @@ resetUserPassword() {
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        resetUserPassword()
+        resetUserPassword
     fi
 }
 expirePasswords() {
