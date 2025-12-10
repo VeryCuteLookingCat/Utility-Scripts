@@ -3,6 +3,12 @@
 MAGENTA="\033[95m"
 RESET="\033[0m"
 
+if [[ $EUID -ne 0 ]]; then
+    echo -e "${MAGENTA}[!]{$RESET} This script must be run as root."
+    echo "Run using: sudo ./Utility.sh"
+    exit 1
+fi
+
 showMainMenu() {
     while true; do
         clear
