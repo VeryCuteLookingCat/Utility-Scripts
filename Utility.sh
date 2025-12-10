@@ -369,12 +369,12 @@ printUsers() {
 deleteUser() {
     read -p "Enter username to delete (0 to cancel): " u
     [[ "$u" == "0" ]] && return
-    if id "$u" &>/dev/null; then
+    if (id "$u" &>/dev/null;) then
         deluser "$u"
         read -p "User deleted. Press enter..."
     else
         read -p "User not found. Press enter..."
-        deleteUser()
+        deleteUser
     fi
 }
 addUser() {
@@ -391,58 +391,58 @@ addUser() {
 }
 makeAdmin() {
     read -p "Enter username: " u
-    if id "$u" &>/dev/null; then
+    if (id "$u" &>/dev/null;) then
         usermod -aG sudo "$u"
         echo "$u is now admin."
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        makeAdmin()
+        makeAdmin
     fi
 }
 removeAdmin() {
     read -p "Enter username: " u
-    if id "$u" &>/dev/null; then
+    if (id "$u" &>/dev/null;) then
         deluser "$u" sudo
         echo "$u is no longer admin."
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        removeAdmin()
+        removeAdmin
     fi
 }
 disableUser() {
     read -p "Enter username: " u
-    if id "$u" &>/dev/null; then
+    if (id "$u" &>/dev/null;) then
         usermod -L "$u"
         echo "Disabled $u"
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        disableUser()
+        disableUser
     fi
 }
 enableUser() {
     read -p "Enter username: " u
-    if id "$u" &>/dev/null; then
+    if (id "$u" &>/dev/null;) then
         usermod -U "$u"
         echo "Enabled $u"
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        enableUser()
+        enableUser
     fi
 }
 resetUserPassword() {
     read -p "Enter username: " u
-    if id "$u" &>/dev/null; then
+    if (id "$u" &>/dev/null;) then
         password=$(openssl rand -base64 12)
         echo "$u:$password" | chpasswd
         echo "New password for $u: $password"
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        resetUserPassword()
+        resetUserPassword
     fi
 }
 expirePasswords() {
