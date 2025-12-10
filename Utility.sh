@@ -15,12 +15,8 @@ showMainMenu() {
         echo -e "${MAGENTA}====== Linux Utility Script ======${RESET}"
         echo -e "${MAGENTA}[1]${RESET} Apply baseline hardening"
         echo -e "${MAGENTA}[2]${RESET} Manage user accounts"
-        echo -e "${MAGENTA}[3]${RESET} Review privilege assignments"
-        echo -e "${MAGENTA}[4]${RESET} Audit system security"
-        echo -e "${MAGENTA}[5]${RESET} Manage services & startup"
-        echo -e "${MAGENTA}[6]${RESET} Firewall & network configuration"
-        echo -e "${MAGENTA}[7]${RESET} File hashing utility"
-        echo -e "${MAGENTA}[8]${RESET} Credits"
+        echo -e "${MAGENTA}[3]${RESET} System wide search"
+        echo -e "${MAGENTA}[4]${RESET} Credits"
         echo -e "${MAGENTA}[0]${RESET} Exit"
         echo -e "${MAGENTA}====================================${RESET}"
 
@@ -29,12 +25,8 @@ showMainMenu() {
         case "$choice" in
             1) applyBaselinePolicy ;;
             2) manageUsers ;;
-            3) userRightsAssignments ;;
-            4) auditPolicy ;;
-            5) manageServices ;;
-            6) firewallAndNetwork ;;
-            7) hashFile ;;
-            8) Credits ;;
+            3) searchByExtension ;;
+            4) Credits ;;
             0) exit ;;
             *) echo "Invalid option"; read -p "Press enter to continue" ;;
         esac
@@ -65,30 +57,24 @@ applyBaselinePolicy() {
     sed -i 's/^PASS_WARN_AGE.*/PASS_WARN_AGE   7/' /etc/login.defs
     echo -e "${MAGENTA}[+]${RESET} Login settings updated."
 
-    
     if [ -f /etc/pam.d/common-password ]; then
         if grep -q "pam_pwquality.so" /etc/pam.d/common-password; then
-            sed -i 's/^password\s\+requisite\s\+pam_pwquality.so.*/password requisite pam_pwquality.so retry=3 minlen=12 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1/' /etc/pam.d/common-password
+            sed -i 's/^password\s\+requisite\s\+pam_pwquality.so.*/password requisite pam_pwquality.so retry=3 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1 minlen=12/' /etc/pam.d/common-password
         else
-            echo "password requisite pam_pwquality.so retry=3 minlen=12 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1" >> /etc/pam.d/common-password
+            echo "password requisite pam_pwquality.so retry=3 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1 minlen=12" >> /etc/pam.d/common-password
         fi
-        echo -e "${MAGENTA}[+]${RESET} Password complexity enforced (pwquality)."
+        echo -e "${MAGENTA}[+]${RESET} PAM password complexity enforced."
     else
-        echo -e "${MAGENTA}[!]${RESET} pwquality config not found — skipping."
+        echo -e "${MAGENTA}[!]${RESET} /etc/pam.d/common-password not found, skipping PAM complexity."
     fi
-
-    if [ -f /etc/security/faillock.conf ]; then
-        sed -i 's/^#\?deny.*/deny = 5/' /etc/security/faillock.conf
-        sed -i 's/^#\?unlock_time.*/unlock_time = 300/' /etc/security/faillock.conf
-        sed -i 's/^#\?fail_interval.*/fail_interval = 900/' /etc/security/faillock.conf
-
-        if ! grep -q "^audit" /etc/security/faillock.conf; then
-            echo "audit" >> /etc/security/faillock.conf
-        fi
-
-        echo -e "${MAGENTA}[+]${RESET} Account lockout policy applied (fail 5 times → lock 5 min)."
+    if [ -f /etc/pam.d/common-auth ]; then
+        addPamLine /etc/pam.d/common-auth "auth required pam_faillock.so preauth silent deny=5 unlock_time=300"
+        addPamLine /etc/pam.d/common-auth "auth [success=1 default=bad] pam_unix.so"
+        addPamLine /etc/pam.d/common-auth "auth [default=die] pam_faillock.so authfail"
+        addPamLine /etc/pam.d/common-auth "account required pam_faillock.so"
+        echo -e "${MAGENTA}[+]${RESET} PAM lockout policy applied."
     else
-        echo -e "${MAGENTA}[!]${RESET} faillock.conf not found — skipping lockout policy."
+        echo -e "${MAGENTA}[!]${RESET} PAM common-auth not found, skipping lockout policy."
     fi
 
     passwd -l root >/dev/null 2>&1 || true
@@ -316,6 +302,28 @@ manageUsers() {
         esac
     done
 }
+searchByExtension() {
+    clear
+    echo -e "${MAGENTA}-----------= File Search =-----------${RESET}"
+    echo -e "${MAGENTA}[0]${RESET} Back -> Main Menu"
+    read -p "Enter file extension (example: mp3, py, sh, jpg): " ext
+    [[ "$ext" == "0" ]] && showMainMenu
+    [[ -z "$ext" ]] && { echo "No extension entered."; read -p "Press enter..."; searchByExtension }
+
+    echo -e "${MAGENTA}[+]${RESET} Searching entire system for *.$ext ..."
+    echo ""
+
+    find / \
+        -path /proc -prune -o \
+        -path /sys -prune -o \
+        -path /run -prune -o \
+        -path /dev -prune -o \
+        -type f -iname "*.$ext" -print 2>/dev/null
+
+    echo ""
+    echo -e "${MAGENTA}[+]${RESET} Search complete."
+    read -p "Press enter to continue..."
+}
 Credits() {
     clear
     echo -e "${MAGENTA}---------= User Management =---------${RESET}"
@@ -324,6 +332,7 @@ Credits() {
     echo -e "${MAGENTA}[+]${RESET} My Cat - Wrote entire backend"
     echo -e "N/A"
     echo -e "${MAGENTA}-------------------------------------${RESET}"
+    read -p "Yaaaay ( Enter to Return ) "
 }
 printUsers() {
     users=$(awk -F: '$3 >= 1000 {print $1}' /etc/passwd)
@@ -369,12 +378,12 @@ printUsers() {
 deleteUser() {
     read -p "Enter username to delete (0 to cancel): " u
     [[ "$u" == "0" ]] && return
-    if (id "$u" &>/dev/null;) then
-        deluser "$u"
+    if id "$u" &>/dev/null; then
+        sudo deluser "$u"
         read -p "User deleted. Press enter..."
     else
         read -p "User not found. Press enter..."
-        deleteUser
+        deleteUser()
     fi
 }
 addUser() {
@@ -382,8 +391,8 @@ addUser() {
     [[ "$u" == "0" ]] && return
 
     password=$(openssl rand -base64 12)
-    adduser --disabled-password --gecos "" "$u"
-    echo "$u:$password" | chpasswd
+    sudo adduser --disabled-password --gecos "" "$u"
+    echo "$u:$password" | sudo chpasswd
 
     echo "Created user: $u"
     echo "Password: $password"
@@ -391,63 +400,75 @@ addUser() {
 }
 makeAdmin() {
     read -p "Enter username: " u
-    if (id "$u" &>/dev/null;) then
-        usermod -aG sudo "$u"
+    if id "$u" &>/dev/null; then
+        sudo usermod -aG sudo "$u"
         echo "$u is now admin."
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        makeAdmin
+        makeAdmin()
     fi
 }
 removeAdmin() {
     read -p "Enter username: " u
-    if (id "$u" &>/dev/null;) then
-        deluser "$u" sudo
+    if id "$u" &>/dev/null; then
+        sudo deluser "$u" sudo
         echo "$u is no longer admin."
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        removeAdmin
+        removeAdmin()
     fi
 }
 disableUser() {
     read -p "Enter username: " u
-    if (id "$u" &>/dev/null;) then
-        usermod -L "$u"
+    if id "$u" &>/dev/null; then
+        sudo usermod -L "$u"
         echo "Disabled $u"
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        disableUser
+        disableUser()
     fi
 }
 enableUser() {
     read -p "Enter username: " u
-    if (id "$u" &>/dev/null;) then
-        usermod -U "$u"
+    if id "$u" &>/dev/null; then
+        sudo usermod -U "$u"
         echo "Enabled $u"
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        enableUser
+        enableUser()
     fi
 }
+
+generateSecurePassword() {
+    local upper=$(tr -dc 'A-Z' </dev/urandom | head -c 1)
+    local lower=$(tr -dc 'a-z' </dev/urandom | head -c 1)
+    local digit=$(tr -dc '0-9' </dev/urandom | head -c 1)
+    local special=$(tr -dc '!@#$%^&*()_+=-{}[]:;<>?,.' </dev/urandom | head -c 1)
+    local rest=$(tr -dc 'A-Za-z0-9!@#$%^&*()_+=-{}[]:;<>?,.' </dev/urandom | head -c 8)
+
+    echo "$upper$lower$digit$special$rest" | fold -w1 | shuf | tr -d '\n'
+    echo
+}
+
 resetUserPassword() {
     read -p "Enter username: " u
-    if (id "$u" &>/dev/null;) then
-        password=$(openssl rand -base64 12)
+    if id "$u" &>/dev/null; then
+        password=$(generateSecurePassword)
         echo "$u:$password" | chpasswd
         echo "New password for $u: $password"
         read -p "Press enter..."
     else
         read -p "User not found. Press enter..."
-        resetUserPassword
+        resetUserPassword()
     fi
 }
 expirePasswords() {
     for u in $(awk -F: '$3 >= 1000 {print $1}' /etc/passwd); do
-        chage -M 90 "$u"
+        sudo chage -M 90 "$u"
     done
     echo "All users now have expiring passwords."
     read -p "Press enter..."
