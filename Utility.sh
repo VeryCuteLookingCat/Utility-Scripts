@@ -65,24 +65,30 @@ applyBaselinePolicy() {
     sed -i 's/^PASS_WARN_AGE.*/PASS_WARN_AGE   7/' /etc/login.defs
     echo -e "${MAGENTA}[+]${RESET} Login settings updated."
 
+    
     if [ -f /etc/pam.d/common-password ]; then
         if grep -q "pam_pwquality.so" /etc/pam.d/common-password; then
-            sed -i 's/^password\s\+requisite\s\+pam_pwquality.so.*/password requisite pam_pwquality.so retry=3 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1 minlen=12/' /etc/pam.d/common-password
+            sed -i 's/^password\s\+requisite\s\+pam_pwquality.so.*/password requisite pam_pwquality.so retry=3 minlen=12 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1/' /etc/pam.d/common-password
         else
-            echo "password requisite pam_pwquality.so retry=3 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1 minlen=12" >> /etc/pam.d/common-password
+            echo "password requisite pam_pwquality.so retry=3 minlen=12 ucredit=-1 lcredit=-1 dcredit=-1 ocredit=-1" >> /etc/pam.d/common-password
         fi
-        echo -e "${MAGENTA}[+]${RESET} PAM password complexity enforced."
+        echo -e "${MAGENTA}[+]${RESET} Password complexity enforced (pwquality)."
     else
-        echo -e "${MAGENTA}[!]${RESET} /etc/pam.d/common-password not found, skipping PAM complexity."
+        echo -e "${MAGENTA}[!]${RESET} pwquality config not found — skipping."
     fi
-    if [ -f /etc/pam.d/common-auth ]; then
-        addPamLine /etc/pam.d/common-auth "auth required pam_faillock.so preauth silent deny=5 unlock_time=300"
-        addPamLine /etc/pam.d/common-auth "auth [success=1 default=bad] pam_unix.so"
-        addPamLine /etc/pam.d/common-auth "auth [default=die] pam_faillock.so authfail"
-        addPamLine /etc/pam.d/common-auth "account required pam_faillock.so"
-        echo -e "${MAGENTA}[+]${RESET} PAM lockout policy applied."
+
+    if [ -f /etc/security/faillock.conf ]; then
+        sed -i 's/^#\?deny.*/deny = 5/' /etc/security/faillock.conf
+        sed -i 's/^#\?unlock_time.*/unlock_time = 300/' /etc/security/faillock.conf
+        sed -i 's/^#\?fail_interval.*/fail_interval = 900/' /etc/security/faillock.conf
+
+        if ! grep -q "^audit" /etc/security/faillock.conf; then
+            echo "audit" >> /etc/security/faillock.conf
+        fi
+
+        echo -e "${MAGENTA}[+]${RESET} Account lockout policy applied (fail 5 times → lock 5 min)."
     else
-        echo -e "${MAGENTA}[!]${RESET} PAM common-auth not found, skipping lockout policy."
+        echo -e "${MAGENTA}[!]${RESET} faillock.conf not found — skipping lockout policy."
     fi
 
     passwd -l root >/dev/null 2>&1 || true
