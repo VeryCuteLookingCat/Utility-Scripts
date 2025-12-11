@@ -8,9 +8,9 @@ function showMainMenu {
         write-host "[1]" -ForegroundColor Magenta -NoNewline; write-host " Baseline security policy (auto)"
         write-host "[2]" -ForegroundColor Magenta -NoNewline; write-host " Manage user accounts"
         write-host "[3]" -ForegroundColor Magenta -NoNewline; write-host " User rights assignments"
-        write-host "[4]" -ForegroundColor Magenta -NoNewline; write-host " Audit policy"
-        write-host "[5]" -ForegroundColor Magenta -NoNewline; write-host " Services and startup"
-        write-host "[6]" -ForegroundColor Magenta -NoNewline; write-host " Firewall and network"
+        write-host "[4]" -ForegroundColor Magenta -NoNewline; write-host " Network Shares"
+        write-host "[5]" -ForegroundColor Magenta -NoNewline; write-host " Net Ports"
+        write-host "[6]" -ForegroundColor Magenta -NoNewline; write-host " Driver Scan"
         write-host "[7]" -ForegroundColor Magenta -NoNewline; write-host " Hash File" 
         write-host "[8]" -ForegroundColor Magenta -NoNewline; write-host " Silly Credits"
         write-host "[0]" -ForegroundColor Magenta -NoNewline; write-host " Exit"
@@ -22,12 +22,12 @@ function showMainMenu {
             1 { applyBaselinePolicy }
             2 { manageUsers }
             3 { userRightsAssignments }
-            4 {  }
-            5 {  }
-            6 {  }
+            4 { networkSharing }
+            5 { netPorts }
+            6 { driverScan }
             7 { hashFile  }
             8 { Credits }
-            0 { break }
+            0 { exit }
             default { write-Host "Invalid option"; pause }
         }
     }
@@ -44,14 +44,6 @@ function randomStr {
 }
 
 
-function applyBaselinePolicy {
-
-        clear-Host
-        write-host "[?]" -ForegroundColor Magenta -NoNewline; write-host " Starting..."
-        write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Done!"
-        pause
-
-}
 function manageUsers {# to do: Reset Password, Add tag if user doesn't have password
  
     while ($true) {
@@ -102,7 +94,6 @@ function userRightsAssignments {
         write-host ""
         write-host "------------------------------------" -ForegroundColor Magenta
 
-
         $choice = read-Host "Select option"
         switch ($choice) {
             1 { Start-Process "secpol.msc" }
@@ -111,6 +102,128 @@ function userRightsAssignments {
         }
     }
 }
+function networkSharing {
+
+    while ($true) {
+        clear-Host 
+        write-host "--------= Network  Sharing =--------" -ForegroundColor Magenta
+        write-host "[1]" -ForegroundColor Magenta -NoNewline; write-host " Remove Share"
+        write-host "[0]" -ForegroundColor Magenta -NoNewline; write-host " Back -> Main Menu"
+        write-host "[?]" -ForegroundColor Magenta -NoNewLine; write-host " Shares:"
+        write-host ""
+        printShares
+        write-host ""
+        write-host "------------------------------------" -ForegroundColor Magenta
+
+        $choice = read-Host "Select option"
+        switch ($choice) {
+            1 { 
+                $name = read-Host "Enter Share name"
+                if ($name -eq "0") { return networkSharing }
+
+                try {
+                    Remove-SmbShare -Name $choice -Force -ErrorAction Stop
+                    write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Removed share: $choice"
+                }
+                catch {
+                    write-host "[-]" -ForegroundColor Magenta -NoNewline; write-host " Failed or share does not exist."
+                }
+                pause
+                return networkSharing
+
+            }
+            0 { return showMainMenu }
+            default { write-Host "Invalid option"; pause }
+        }
+    }
+}
+function netPorts {
+    clear-Host
+    write-host "---------= Network  Ports =---------" -ForegroundColor Magenta
+    write-host "[?] Active Listening Ports:" -ForegroundColor Magenta
+    write-host ""
+    $portMap = @{
+        21="FTP"; 22="SSH"; 23="Telnet"; 25="SMTP"; 53="DNS";
+        67="DHCP Server"; 68="DHCP Client"; 69="TFTP"; 80="HTTP";
+        110="POP3"; 135="RPC"; 137="NetBIOS-NS"; 138="NetBIOS-DGM";
+        139="NetBIOS-SSN"; 143="IMAP"; 389="LDAP"; 443="HTTPS";
+        445="SMB"; 512="exec"; 513="login"; 514="shell";
+        587="SMTPS"; 631="CUPS"; 1433="MSSQL"; 1434="MSSQL-Browser";
+        3306="MySQL"; 3389="RDP"; 5432="PostgreSQL"; 5900="VNC";
+        6379="Redis"; 8080="HTTP-Alt"; 25565="Minecraft";
+    }
+
+    $dangerous = @(21,23,69,512,513,514,3306,5432,6379,5900)
+
+    $connections = Get-NetTCPConnection -State Listen | Sort-Object LocalPort
+
+    foreach ($conn in $connections) {
+        $owningPid = $conn.OwningProcess
+        try { $procName = (Get-Process -Id $owningPid).Name }
+        catch { $procName = "Unknown" }
+
+        $port = $conn.LocalPort
+        $desc = $portMap[$port]
+        if (-not $desc) { $desc = "Unknown/Custom" }
+
+        # threat logic
+        if ($dangerous -contains $port) {
+            write-host "[!]" -ForegroundColor Red -NoNewline
+            write-host " Port $port ($desc)  ->  $procName (PID $owningPid)"
+        }
+        elseif ($desc -eq "Unknown/Custom" -and $port -lt 49152) {
+            write-host "[?]" -ForegroundColor Yellow -NoNewline
+            write-host " Port $port ($desc)  ->  $procName (PID $owningPid)"
+        }
+        else {
+            write-host "[-] Port $port ($desc)  ->  $procName (PID $owningPid)"
+        }
+    }
+
+    write-host ""
+    write-host "------------------------------------" -ForegroundColor Magenta
+    pause
+    return showMainMenu
+}
+function driverScan {
+    clear-Host
+    write-host "----------= Driver  Scan =----------" -ForegroundColor Magenta
+    write-host "[?] Scanning system drivers..." -ForegroundColor Magenta
+    write-host ""
+
+    $drivers = Get-WmiObject Win32_SystemDriver | Sort-Object Name
+
+    foreach ($d in $drivers) {
+        $path = $d.PathName
+        $state = $d.State
+        $mode = $d.StartMode
+
+        $flag = $false
+
+        if (-not $path) { $flag = $true }
+
+        if ($path -and $path -notmatch "System32|systemroot|SysWOW64") { $flag = $true }
+
+        if ($state -eq "Running" -and $path -notmatch "System32") { $flag = $true }
+
+        if ($flag) {
+            write-host "[!]" -ForegroundColor Magenta -NoNewline
+            write-host " $($d.Name)  |  State: $state  |  Mode: $mode"
+            write-host "     Path: $path"
+        }
+        else {
+            write-host "[-]" -ForegroundColor Magenta -NoNewline write-host"  $($d.Name) | State: $state | Mode: $mode"
+            write-host ""
+        }
+    }
+
+    write-host ""
+    write-host "------------------------------------" -ForegroundColor Magenta
+    pause
+    return showMainMenu
+}
+
+
 function hashFile {
     clear-Host 
     write-host "---------=  File Hashing  =---------" -ForegroundColor Magenta
@@ -159,6 +272,272 @@ function Credits {
     return showMainMenu
 
 }
+#------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Baseline security
+
+function applyBaselinePolicy {
+
+    clear-Host
+    write-host "[?] Starting..." -ForegroundColor Magenta
+
+    $filePath = "$env:TEMP\BasePolicy.inf"
+    secedit /export /cfg "$filePath" /areas SECURITYPOLICY USER_RIGHTS GROUP_MGMT | Out-Null
+
+    # ===========================
+    # System Access (Passwords)
+    # ===========================
+    setInfValue $filePath "System Access" "PasswordHistorySize" "5"
+    setInfValue $filePath "System Access" "MaximumPasswordAge" "90"
+    setInfValue $filePath "System Access" "MinimumPasswordAge" "30"
+    setInfValue $filePath "System Access" "MinimumPasswordLength" "12"
+    setInfValue $filePath "System Access" "PasswordComplexity" "1"
+    setInfValue $filePath "System Access" "ClearTextPassword" "0"
+    setInfValue $filePath "System Access" "LockoutBadCount" "5"
+    setInfValue $filePath "System Access" "ResetLockoutCount" "15"
+    setInfValue $filePath "System Access" "LockoutDuration" "15"
+
+    write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Modified System Access"
+
+    # ===========================
+    # Security Options
+    # ===========================
+    setInfValue $filePath "Security Options" "DisableCAD" "0"
+    setInfValue $filePath "Security Options" "EnableAdminAccount" "0"
+    setInfValue $filePath "Security Options" "EnableGuestAccount" "0"
+    setInfValue $filePath "Security Options" "LmCompatibilityLevel" "5"
+    setInfValue $filePath "Security Options" "NoLMHash" "1"
+    setInfValue $filePath "Security Options" "AuditBaseObjects" "1"
+    setInfValue $filePath "Security Options" "ForceUnlockLogon" "1"
+    setInfValue $filePath "Security Options" "FilterAdministratorToken" "1"
+    setInfValue $filePath "Security Options" "ConsentPromptBehaviorAdmin" "2"
+    setInfValue $filePath "Security Options" "ConsentPromptBehaviorUser" "1"
+    setInfValue $filePath "Security Options" "PromptOnSecureDesktop" "1"
+    setInfValue $filePath "Security Options" "LSAAnonymousNameLookup" "0"
+    setInfValue $filePath "Security Options" "RestrictAnonymous" "1"
+    setInfValue $filePath "Security Options" "RestrictAnonymousSAM" "1"
+    setInfValue $filePath "Security Options" "RequireSignOrSeal" "1"
+    setInfValue $filePath "Security Options" "RequireStrongKey" "1"
+    setInfValue $filePath "Security Options" "ForceLogoffWhenHourExpires" "1"
+    setInfValue $filePath "Security Options" "NullSessionPipes" ""
+    setInfValue $filePath "Security Options" "NullSessionShares" ""
+    setInfValue $filePath "Security Options" "RestrictNullSessAccess" "1"
+    setInfValue $filePath "Security Options" "DriverSigningPolicy" "2"
+    setInfValue $filePath "Security Options" "DriverSigningBehavior" "2"
+    setInfValue $filePath "Security Options" "SMBIdleDisconnectTimeout" "15"
+    setInfValue $filePath "Security Options" "DontAllowRemoteRegistry" "1"
+    setInfValue $filePath "Security Options" "CachedLogonsCount" "0"
+    setInfValue $filePath "Security Options" "NtlmMinClientSec" "536870912"
+    setInfValue $filePath "Security Options" "NtlmMinServerSec" "536870912"
+    setInfValue $filePath "Security Options" "EnablePlainTextPassword" "0"
+    setInfValue $filePath "Security Options" "CodeSigningForDrivers" "1"
+    setInfValue $filePath "Security Options" "DisablePasswordCaching" "1"
+    setInfValue $filePath "Security Options" "LegalNoticeCaption" "Authorized Use Only"
+    setInfValue $filePath "Security Options" "LegalNoticeText" "This system is for authorized use only."
+    setInfValue $filePath "Security Options" "EveryoneIncludesAnonymous" "0"
+    setInfValue $filePath "Security Options" "AllowAnonymousSIDNameTranslation" "0"
+    setInfValue $filePath "Security Options" "NewAdministratorName" "admin-secure"
+    setInfValue $filePath "Security Options" "NewGuestName" "guest-disabled"
+
+
+
+    write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Modified Security Options"
+
+
+
+    # ===========================
+    # Audit Policy
+    # ===========================
+    setInfValue $filePath "Audit Policy" "AuditLogonEvents" "3"
+    setInfValue $filePath "Audit Policy" "AuditAccountLogon" "3"
+    setInfValue $filePath "Audit Policy" "AuditPrivilegeUse" "3"
+    setInfValue $filePath "Audit Policy" "AuditPolicyChange" "3"
+    setInfValue $filePath "Audit Policy" "AuditSystemEvents" "3"
+    setInfValue $filePath "Audit Policy" "AuditAccountManage" "3"
+    setInfValue $filePath "Audit Policy" "AuditDSAccess" "3"
+    setInfValue $filePath "Audit Policy" "AuditObjectAccess" "3"
+    write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Modified Audit Policy"
+
+    # ===========================
+    # APPLY CONFIG
+    # ===========================
+    secedit /configure /db "C:\Windows\security\database\local.sdb" `
+        /cfg "$filePath" `
+        /areas SECURITYPOLICY USER_RIGHTS GROUP_MGMT | Out-Null
+
+    gpupdate /force | Out-Null
+    write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Imported Securit Policy's"
+
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\RemoteRegistry" -Name "Start" -Value 4
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "AllowInsecureGuestAuth" -Value 0
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\NetBT\Parameters" -Name "NodeType" -Value 2
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "SMB1" -Value 0
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile\Logging" -Name "LogDroppedPackets" -Value 1
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile\Logging" -Name "LogSuccessfulConnections" -Value 1
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "AutoShareWks" -Value 0
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" -Name "DisabledComponents" -Value 0xFF
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Remote Assistance" -Name "fAllowToGetHelp" -Value 0
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Remote Assistance" -Name "fAllowFullControl" -Value 0    
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" -Name "RunAsPPL" -Value 1
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" -Name "NoLMHash" -Value 1
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" -Name "DisableDomainCreds " -Value 1
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" -Name "DisableAnonymousSIDNameTranslation" -Value 1
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0" -Name "RestrictReceivingNTLMTraffic" -Value 1
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "RequireSecuritySignature" -Value 1
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "RequireSecuritySignature" -Value 1
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "RestrictNullSessAccess" -Value 1
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "AllowInsecureGuestAuth" -Value 0
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server" -Name Enabled -Value 0
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server" -Name Enabled -Value 0
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "MinEncryptionLevel" -Value 3
+    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1
+    Set-ItemProperty -Path "HKLM\Software\Microsoft\Windows\CurrentVersion\Explorer" -Name "SmartScreenEnabled" -Value "RequireAdmin"
+    Set-ItemProperty -Path "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Value 255
+    Set-ItemProperty -Path "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoAutorun" -Value 1
+    Set-ItemProperty -Path "HKLM\Software\Microsoft\Windows Script Host\Settings" -Name "Enabled" -Value 0
+    Set-ItemProperty -Path "HKLM\Software\Policies\Microsoft\Windows NT\Terminal Services" -Name "fDisableClipboardRedirection" -Value 1
+    Set-ItemProperty -Path "HKLM\Software\Policies\Microsoft\Windows NT\DNSClient" -Name "EnableMulticast" -Value 0
+    Set-ItemProperty -Path "HKLM\Software\Policies\Microsoft\Windows\PowerShell" -Name "ExecutionPolicy" -Value "Restricted"
+    Set-ItemProperty -Path "HKLM\Software\Policies\Microsoft\Windows\PowerShell" -Name "EnableScripts" -Value 0
+    Set-ItemProperty -Path "HKLM\Software\Policies\Microsoft Services\AdmPwd" -Name "AdmPwdEnabled" -Value 1
+    Set-ItemProperty -Path "HKLM\Software\Policies\Microsoft Services\AdmPwd" -Name "PasswordComplexity" -Value 4
+
+
+    New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 2.0\Server" -Force | Out-Null
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 2.0\Server" -Name Enabled -Value 0
+
+    New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 3.0\Server" -Force | Out-Null
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 3.0\Server" -Name Enabled -Value 0
+
+
+    write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Modified Registry"
+
+    Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart
+    Disable-WindowsOptionalFeature -Online -FeatureName TelnetClient -NoRestart
+    Disable-WindowsOptionalFeature -Online -FeatureName IIS-WebServerRole -NoRestart
+
+    write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Disabled optional features"
+
+    schtasks /Change /TN "\Microsoft\Windows\RemoteAssistance\RemoteAssistanceTask" /Disable
+    schtasks /Change /TN "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator" /Disable
+
+    write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Removed scheduled tasks"
+
+    Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True
+    Set-NetFirewallProfile -Profile Domain,Private,Public -DefaultInboundAction Block
+    Set-NetFirewallProfile -Profile Domain,Private,Public -DefaultOutboundAction Allow
+
+    netsh advfirewall set allprofiles settings inboundusernotification enable
+    netsh advfirewall set allprofiles logging name "%systemroot%\system32\LogFiles\Firewall\pfirewall.log"
+    netsh advfirewall set allprofiles logging maxfilesize 4096
+
+    write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Enabled firewall"
+
+    Disable-PSRemoting -Force
+    winrm delete winrm/config/Listener?Address=*+Transport=HTTP 2>$null
+    Set-Service -Name "WinRM" -StartupType Disabled
+    Stop-Service -Name "WinRM" -Force
+
+    Set-Service -Name "RemoteAccess" -StartupType Disabled
+    Stop-Service -Name "RemoteAccess" -Force
+    
+    Set-Service -Name "SNMP" -StartupType Disabled
+    Stop-Service -Name "SNMP" -Force
+    
+    Set-Service -Name "Telnet" -StartupType Disabled
+    Stop-Service -Name "Telnet" -Force
+    
+    Set-Service -Name "BTAGService" -StartupType Disabled
+    Stop-Service -Name "BTAGService" -Force
+    
+    Set-Service -Name "bthserv" -StartupType Disabled
+    Stop-Service -Name "bthserv" -Force
+    
+    Set-Service -Name "PeerDistSvc" -StartupType Disabled 
+    Stop-Service -Name "PeerDistSvc" -Force
+    
+    Set-Service -Name "Spooler" -StartupType Disabled
+    Stop-Service -Name "Spooler" -Force
+
+    Set-Service -Name "SessionEnv" -StartupType Disabled
+    Stop-Service -Name "SessionEnv" -Force
+
+    Set-Service -Name "WDSServer" -StartupType Disabled
+    Stop-Service -Name "WDSServer" -Force
+
+    Set-Service -Name "vmicguestinterface" -StartupType Disabled
+    Set-Service -Name "vmicshutdown" -StartupType Disabled
+    Set-Service -Name "vmicheartbeat" -StartupType Disabled
+
+
+
+    write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Disabled useless services's"
+    
+    Set-SmbClientConfiguration -EnableSMB1Protocol $false -Force
+    dnscmd /config /NoRecursion 1 2>$null
+    Set-MpPreference -DisableRealtimeMonitoring $false
+    Set-MpPreference -DisableIOAVProtection $false
+    Set-MpPreference -DisableScriptScanning $false
+    Set-MpPreference -MAPSReporting 2
+    Set-MpPreference -SubmitSamplesConsent 2
+    write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Disabled useless services's"
+    Remove-LocalGroupMember -Group "Guests" -Member "guest-disabled"
+
+
+    write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Basline Security Applied!"
+    pause
+}
+function setInfValue {
+    param(
+        [string]$file,
+        [string]$section,
+        [string]$key,
+        [string]$value
+    )
+
+    if (-not (Test-Path $file)) {
+        throw "INF file not found: $file"
+    }
+
+    $content = Get-Content $file
+    $newContent = @()
+    $inSection = $false
+    $keyWritten = $false
+
+    for ($i = 0; $i -lt $content.Count; $i++) {
+
+        if ($content[$i] -match "^\[$section\]$") {
+            $inSection = $true
+            $newContent += $content[$i]
+            continue
+        }
+
+        if ($inSection -and $content[$i] -match "^\[.*\]$") {
+            if (-not $keyWritten) {
+                $newContent += "$key = $value"
+                $keyWritten = $true
+            }
+            $inSection = $false
+        }
+
+        if ($inSection -and $content[$i] -match "^$key\s*=") {
+            $newContent += "$key = $value"
+            $keyWritten = $true
+            continue
+        }
+
+        $newContent += $content[$i]
+    }
+
+    if (-not $keyWritten) {
+        $newContent += ""
+        $newContent += "[$section]"
+        $newContent += "$key = $value"
+    }
+
+    Set-Content -Path $file -Value $newContent -Encoding ASCII
+}
+
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # USER MANAGMENT
 function printUsers {
@@ -535,6 +914,22 @@ function printUserAssignments {
     foreach($username in $assignments.Keys) {
 
         write-host "$($username) = $($assignments[$username] -join ' - ')"
+    }
+}
+
+function printShares {
+
+    $default = @("ADMIN$", "C$", "IPC$", "PRINT$", "FAX$")
+    $shares = Get-SmbShare
+
+    foreach ($s in $shares) {
+        if ($default -contains $s.Name) {
+            write-host "$($s.Name) = Default" 
+        }
+        else {
+            write-host "[!]" -ForegroundColor Magenta -NoNewline
+            write-host " $($s.Name) -> $($s.Path)" 
+        }
     }
 }
 
