@@ -12,11 +12,16 @@ fi
 showMainMenu() {
     while true; do
         clear
-        echo -e "${MAGENTA}====== Linux Utility Script ======${RESET}"
+        echo -e "${MAGENTA}======= Linux Utility Script =======${RESET}"
         echo -e "${MAGENTA}[1]${RESET} Apply baseline hardening"
         echo -e "${MAGENTA}[2]${RESET} Manage user accounts"
         echo -e "${MAGENTA}[3]${RESET} System wide search"
-        echo -e "${MAGENTA}[4]${RESET} Credits"
+        echo -e "${MAGENTA}[4]${RESET} Program List"
+        echo -e "${MAGENTA}[5]${RESET} Port List"
+        echo -e "${MAGENTA}[6]${RESET} Service Manager"
+        echo -e "${MAGENTA}[7]${RESET} Startup Audit"
+        echo -e "${MAGENTA}[8]${RESET} Security Dashboard"
+        echo -e "${MAGENTA}[9]${RESET} Credits"
         echo -e "${MAGENTA}[0]${RESET} Exit"
         echo -e "${MAGENTA}====================================${RESET}"
 
@@ -26,13 +31,451 @@ showMainMenu() {
             1) applyBaselinePolicy ;;
             2) manageUsers ;;
             3) searchByExtension ;;
-            4) Credits ;;
+            4) programSearch ;;
+            5) listOpenPorts ;;
+            6) serviceManager ;;
+            7) startupAudit ;;
+            8) securityDashboard ;;
+            9) Credits ;;
             0) exit ;;
             *) echo "Invalid option"; read -p "Press enter to continue" ;;
         esac
     done
 }
-applyBaselinePolicy() {
+
+manageUsers() {
+    while true; do
+        clear
+        echo -e "${MAGENTA}---------= User Management =---------${RESET}"
+        echo -e "${MAGENTA}[1]${RESET} Delete User"
+        echo -e "${MAGENTA}[2]${RESET} Add User"
+        echo -e "${MAGENTA}[3]${RESET} Make Administrator"
+        echo -e "${MAGENTA}[4]${RESET} Remove Administrator"
+        echo -e "${MAGENTA}[5]${RESET} Disable User"
+        echo -e "${MAGENTA}[6]${RESET} Enable User"
+        echo -e "${MAGENTA}[7]${RESET} Reset Password"
+        echo -e "${MAGENTA}[8]${RESET} Make Passwords Expirable"
+        echo -e "${MAGENTA}[0]${RESET} Back -> Main Menu"
+        echo -e "${MAGENTA}[?]${RESET} Users:"
+        echo ""
+
+        printUsers
+
+        echo ""
+        echo -e "${MAGENTA}-------------------------------------${RESET}"
+
+        read -p "Select option: " u
+        case "$u" in
+            1) deleteUser ;;
+            2) addUser ;;
+            3) makeAdmin ;;
+            4) removeAdmin ;;
+            5) disableUser ;;
+            6) enableUser ;;
+            7) resetUserPassword ;;
+            8) expirePasswords ;;
+            0) return ;;
+        esac
+    done
+}
+searchByExtension() {
+    clear
+    echo -e "${MAGENTA}-----------= File Search =-----------${RESET}"
+    echo -e "${MAGENTA}[0]${RESET} Back -> Main Menu"
+    echo -e "${MAGENTA}-------------------------------------${RESET}"
+    read -p "Enter file extension (example: mp3, py, sh, jpg): " ext
+
+    [[ "$ext" == "0" ]] && return
+
+    if [[ -z "$ext" ]]; then
+        echo "No extension entered."
+        read -p "Press enter..."
+        return
+    fi
+
+    echo -e "${MAGENTA}[+]${RESET} Searching entire system for *.$ext ..."
+    echo ""
+
+    find /home /etc /opt /var/www /usr/local \
+        -type f -iname "*.$ext" 2>/dev/null
+
+    echo ""
+    echo -e "${MAGENTA}[+]${RESET} Search complete."
+    read -p "Press enter to continue..."
+}
+programSearch() {
+    clear
+    echo -e "${MAGENTA}---------= Program search =----------${RESET}"
+    echo -e "${MAGENTA}[1]${RESET} User-Installed programs"
+    echo -e "${MAGENTA}[2]${RESET} Suspicious porgrams"
+    echo -e "${MAGENTA}[3]${RESET} Full package list"
+    echo -e "${MAGENTA}[4]${RESET} Delete program"
+    echo -e "${MAGENTA}[0]${RESET} Back -> Main Menu"
+    echo -e "${MAGENTA}-------------------------------------${RESET}"
+    read -p "Option: " program
+
+    case "$program" in
+        1) apt-mark showmanual && read -p "Enter to continue" && programSearch;; 
+        2) suspiciousPrograms && read -p "Enter to continue" && programSearch;; 
+        3) dpkg -l | awk '{print $2 "\t" $3}' && read -p "Enter to continue" && programSearch;; 
+        4) deleteProgram && programSearch ;;
+        0) return ;;
+    esac
+
+    echo -e "${MAGENTA}[!]${RESET} Invalid Option"
+    read -p "Enter to continue"
+    programSearch
+}
+listOpenPorts() {
+    clear
+    echo -e "${MAGENTA}-----------= Open Ports =-----------${RESET}"
+    echo ""
+
+    printf "%-10s %-10s %-20s %-10s %-20s %-20s\n" "PORT" "PROTO" "PROCESS" "PID" "STATE" "AFFILIATION"
+    ss -tulpn 2>/dev/null | tail -n +2 | while read -r line; do
+        proto=$(echo "$line" | awk '{print $1}')
+        state=$(echo "$line" | awk '{print $2}')
+
+        port=$(echo "$line" | awk '{print $5}' | awk -F: '{print $NF}')
+        [[ "$port" == "*" || -z "$port" ]] && port="N/A"
+
+        pid=$(echo "$line" | grep -oP '(?<=pid=)[0-9]+' || echo "N/A")
+        process=$(echo "$line" | grep -oP '(?<=").*?(?=")' || echo "unknown")
+
+        affiliation=$(getAffiliation "$port" "$process")
+
+        printf "%-10s %-10s %-20s %-10s %-20s %-20s\n" \
+        "$port" "$proto" "$process" "$pid" "$state" "$affiliation"
+    done
+
+    echo -e "${MAGENTA}------------------------------------${RESET}"
+    echo ""
+    read -p "Press enter to continue..."
+}
+serviceManager() {
+    while true; do
+        clear
+        echo -e "${MAGENTA}-----------= Service Manager =-----------${RESET}"
+        echo -e "${MAGENTA}[1]${RESET} List running services"
+        echo -e "${MAGENTA}[2]${RESET} List enabled-on-boot services"
+        echo -e "${MAGENTA}[3]${RESET} Stop a service"
+        echo -e "${MAGENTA}[4]${RESET} Disable a service"
+        echo -e "${MAGENTA}[5]${RESET} Start a service"
+        echo -e "${MAGENTA}[6]${RESET} Enable a service"
+        echo -e "${MAGENTA}[0]${RESET} Back -> Main Menu"
+        echo -e "${MAGENTA}-----------------------------------------${RESET}"
+        read -p "Select: " s
+
+        case "$s" in
+            1) systemctl --type=service --state=running; read -p "Enter to continue" ;;
+            2) systemctl list-unit-files --state=enabled; read -p "Enter to continue" ;;
+            3) read -p "Service to stop: " svc; systemctl stop "$svc"; read -p "Done. Enter..." ;;
+            4) read -p "Service to disable: " svc; systemctl disable "$svc"; read -p "Done. Enter..." ;;
+            5) read -p "Service to start: " svc; systemctl start "$svc"; read -p "Done. Enter..." ;;
+            6) read -p "Service to enable: " svc; systemctl enable "$svc"; read -p "Done. Enter..." ;;
+            0) return ;;
+        esac
+    done
+}
+startupAudit() {
+    clear
+    echo -e "${MAGENTA}-----------= Startup Audit =-----------${RESET}"
+    echo -e "${MAGENTA}[1]${RESET} Cron jobs"
+    echo -e "${MAGENTA}[2]${RESET} Systemd startup services"
+    echo -e "${MAGENTA}[3]${RESET} User autostart files"
+    echo -e "${MAGENTA}[4]${RESET} Suspicious startup scripts"
+    echo -e "${MAGENTA}[0]${RESET} Back"
+    echo -e "${MAGENTA}---------------------------------------${RESET}"
+    read -p "Select: " a
+
+    case "$a" in
+        1) 
+            echo -e "${MAGENTA}[Cron: system]${RESET}"
+            ls -l /etc/cron.* 2>/dev/null
+            echo -e "${MAGENTA}[Cron: per-user]${RESET}"
+            ls -l /var/spool/cron/crontabs 2>/dev/null
+            read -p "Enter to continue"
+        ;;
+        2)
+            systemctl list-unit-files --type=service --state=enabled
+            read -p "Enter to continue"
+        ;;
+        3)
+            find /home -maxdepth 3 -type f -path "*/.config/autostart/*" 2>/dev/null
+            read -p "Enter to continue"
+        ;;
+        4)
+            echo -e "${MAGENTA}[+] Checking rc.local, cron scripts, tmp execs${RESET}"
+            grep -R "curl\|wget\|nc\|bash -i\|python -c" /etc/rc.local /etc/cron* /tmp 2>/dev/null
+            read -p "Enter to continue"
+        ;;
+        0) return ;;
+    esac
+
+    startupAudit
+}
+
+securityDashboard() {
+    clear
+    echo -e "${MAGENTA}-----------= Security Dashboard =-----------${RESET}"
+
+    echo -e "${MAGENTA}[Users >1000]${RESET}"
+    awk -F: '$3>=1000 {print $1}' /etc/passwd
+
+    echo -e "\n${MAGENTA}[Sudo Users]${RESET}"
+    getent group sudo | awk -F: '{print $NF}'
+
+    echo -e "\n${MAGENTA}[Open Ports]${RESET}"
+    ss -tulpn | grep -E "LISTEN|UDP" | awk '{print $1, $5, $7}'
+
+    echo -e "\n${MAGENTA}[Enabled Services]${RESET}"
+    systemctl list-unit-files --state=enabled | head -n 15
+
+    echo -e "\n${MAGENTA}[Suspicious Startup Files]${RESET}"
+    find /etc/rc.local /etc/cron* /tmp -type f 2>/dev/null | head -n 15
+
+    echo -e "\n${MAGENTA}[Firewall Status]${RESET}"
+    ufw status
+
+    echo -e "\n${MAGENTA}[Pending Updates]${RESET}"
+    apt list --upgradable 2>/dev/null | head -n 10
+
+    echo -e "${MAGENTA}--------------------------------------------${RESET}"
+    read -p "Enter to return..."
+}
+
+Credits() {
+    clear
+    echo -e "${MAGENTA}---------= User Management =---------${RESET}"
+    echo -e "${MAGENTA}[+]${RESET} Github ( VeryCuteLookingCat ) - Helped with UI"
+    echo -e "https://github.com/veryCuteLookingCat"
+    echo -e "${MAGENTA}[+]${RESET} My Cat - Wrote entire backend"
+    echo -e "N/A"
+    echo -e "${MAGENTA}-------------------------------------${RESET}"
+    read -p "Yaaaay ( Enter to Return ) "
+}
+printUsers() {
+    users=$(awk -F: '$3 >= 1000 {print $1}' /etc/passwd)
+
+    echo ""
+    for user in $users; do
+        tags=()
+
+        if id -nG "$user" | grep -Eq "(sudo|adm)"; then
+            tags+=("Elevated")
+        fi
+
+        shadow=$(grep "^$user:" /etc/shadow)
+        pwField=$(echo "$shadow" | cut -d: -f2)
+
+        if [[ $pwField == '!'* ]] || [[ $pwField == '*' ]]; then
+            tags+=("Disabled")
+        fi
+
+        expireField=$(echo "$shadow" | cut -d: -f5)
+        if [[ $expireField -eq -1 ]]; then
+            tags+=("Password Never Expires")
+        fi
+
+        minDays=$(echo "$shadow" | cut -d: -f4)
+        if [[ $minDays -ge 99999 ]]; then
+            tags+=("Cannot Change Password")
+        fi
+
+        status=$(passwd -S "$user" | awk '{print $2}')
+        if [[ $status == "L" ]]; then
+            tags+=("Account Locked")
+        fi
+
+        if [[ ${#tags[@]} -eq 0 ]]; then
+            echo "$user = No Flags"
+        else
+            echo "$user = ${tags[*]}"
+        fi
+    done
+    echo ""
+}
+deleteUser() {
+    read -p "Enter username to delete (0 to cancel): " u
+    [[ "$u" == "0" ]] && return
+    if id "$u" &>/dev/null; then
+        sudo deluser "$u"
+        read -p "User deleted. Press enter..."
+    else
+        read -p "User not found. Press enter..."
+        deleteUser
+    fi
+}
+addUser() {
+    read -p "Enter new username (0 to cancel): " u
+    [[ "$u" == "0" ]] && return
+
+    password=$(openssl rand -base64 12)
+    sudo adduser --disabled-password --gecos "" "$u"
+    echo "$u:$password" | sudo chpasswd
+
+    echo "Created user: $u"
+    echo "Password: $password"
+    read -p "Press enter..."
+}
+makeAdmin() {
+    read -p "Enter username: " u
+    if id "$u" &>/dev/null; then
+        sudo usermod -aG sudo "$u"
+        echo "$u is now admin."
+        read -p "Press enter..."
+    else
+        read -p "User not found. Press enter..."
+        makeAdmin
+    fi
+}
+removeAdmin() {
+    read -p "Enter username: " u
+    if id "$u" &>/dev/null; then
+        sudo deluser "$u" sudo
+        echo "$u is no longer admin."
+        read -p "Press enter..."
+    else
+        read -p "User not found. Press enter..."
+        removeAdmin
+    fi
+}
+disableUser() {
+    read -p "Enter username: " u
+    if id "$u" &>/dev/null; then
+        sudo usermod -L "$u"
+        echo "Disabled $u"
+        read -p "Press enter..."
+    else
+        read -p "User not found. Press enter..."
+        disableUser
+    fi
+}
+enableUser() {
+    read -p "Enter username: " u
+    if id "$u" &>/dev/null; then
+        sudo usermod -U "$u"
+        echo "Enabled $u"
+        read -p "Press enter..."
+    else
+        read -p "User not found. Press enter..."
+        enableUser
+    fi
+}
+
+generateSecurePassword() {
+    local upper=$(tr -dc 'A-Z' </dev/urandom | head -c 1)
+    local lower=$(tr -dc 'a-z' </dev/urandom | head -c 1)
+    local digit=$(tr -dc '0-9' </dev/urandom | head -c 1)
+    local special=$(tr -dc '!@#$%^&*()_+=-{}[]:;<>?,.' </dev/urandom | head -c 1)
+    local rest=$(tr -dc 'A-Za-z0-9!@#$%^&*()_+=-{}[]:;<>?,.' </dev/urandom | head -c 8)
+
+    echo "$upper$lower$digit$special$rest" | fold -w1 | shuf | tr -d '\n'
+    echo
+}
+
+resetUserPassword() {
+    read -p "Enter username: " u
+    if id "$u" &>/dev/null; then
+        password=$(generateSecurePassword)
+        echo "$u:$password" | chpasswd
+        echo "New password for $u: $password"
+        read -p "Press enter..."
+    else
+        read -p "User not found. Press enter..."
+        resetUserPassword
+    fi
+}
+expirePasswords() {
+    for u in $(awk -F: '$3 >= 1000 {print $1}' /etc/passwd); do
+        sudo chage -M 90 "$u"
+    done
+    echo "All users now have expiring passwords."
+    read -p "Press enter..."
+}
+suspiciousPrograms() {
+    pattern="^teamviewer$|^anydesk$|^rustdesk$|^vnc|^x11vnc$|^tightvnc$|^tigervnc$|^realvnc$|^freerdp$|^remmina$|^xrdp$|^openssh-server$|^telnet$|^telnetd$|^vsftpd$|^proftpd$|^pure-ftpd$|^samba$|^smbclient$|^netcat$|^nc$|^ncat$|^nmap$|^wireshark$|^tshark$|^ettercap$|^aircrack-ng$|^kismet$|^hydra$|^john$|^john-the-ripper$|^hashcat$|^metasploit$|^msfconsole$|^sqlmap$|^nikto$|^burpsuite$|^proxychains$|^tor$|^torsocks$|^openvpn$|^wireguard$|^vpn$|^docker$|^containerd$|^podman$|^kube|^kubernetes$|^virtualbox$|^vmware$|^qemu$|^kvm$|^mysql$|^mariadb$|^postgresql$|^mongodb$|^redis$|^apache2$|^nginx$|^lighttpd$|^php8?|^php7?|^snapd$|^flatpak$|^steam$|^lutris$|^heroic$|^itch$|^wine$|^playonlinux$|^vlc$|^kodi$|^transmission$|^qbittorrent$|^deluge$|^rtorrent$|^brave-browser$|^google-chrome$|^chromium-browser$|^rsync$"
+    dpkg -l | awk '{print $2}' | grep -E "$pattern"
+}
+deleteProgram() {
+    clear
+    echo -e "${MAGENTA}---------= Delete Program =----------${RESET}"
+    echo -e "${MAGENTA}[0]${RESET} Back -> Main Menu"
+    echo -e "${MAGENTA}-------------------------------------${RESET}"
+    
+    read -p "Enter program name to delete: " pkg
+    [[ "$pkg" == "0" ]] && return
+
+    if ! dpkg -l | awk '{print $2}' | grep -qx "$pkg"; then
+        echo -e "${MAGENTA}[!]${RESET} Package '$pkg' not installed."
+        echo ""
+        
+        echo -e "${MAGENTA}[?]${RESET} Did you mean:"
+        dpkg -l | awk '{print $2}' | grep -i "$pkg" | head -n 10
+        echo ""
+        
+        read -p "Press enter to continue..."
+        deleteProgram
+    fi
+
+    case "$pkg" in
+        bash|coreutils|systemd|systemd-*|login|sudo|apt|dpkg|gnome-shell|ubuntu-desktop)
+            echo -e "${MAGENTA}[!]${RESET} Refusing to delete critical package: $pkg"
+            read -p "Press enter..."
+            return
+            ;;
+    esac
+
+    read -p "Are you sure you want to purge '$pkg'? (y/n): " confirm
+    if [[ "$confirm" != "y" ]]; then
+        echo "Canceled."
+        read -p "Press enter..."
+        deleteProgram
+    fi
+
+    echo -e "${MAGENTA}[+]${RESET} Removing $pkg ..."
+    apt purge -y "$pkg"
+
+    echo -e "${MAGENTA}[+]${RESET} Done."
+    read -p "Press enter..."
+}
+
+getAffiliation() {
+    local port="$1"
+    local process="$2"
+
+    case "$port" in
+        22)  echo "SSH Service" ;;
+        21)  echo "FTP Service" ;;
+        20)  echo "FTP Data Transfer" ;;
+        23)  echo "Telnet Service" ;;
+        25)  echo "Mail Server (SMTP)" ;;
+        53)  echo "DNS Service" ;;
+        67|68) echo "DHCP Service" ;;
+        80)  echo "Web Server (HTTP)" ;;
+        443) echo "Web Server (HTTPS)" ;;
+        631) echo "Printing Service (CUPS)" ;;
+        3306) echo "MySQL Database" ;;
+        5432) echo "Postgres Database" ;;
+        5900) echo "VNC Remote Desktop" ;;
+        3389) echo "RDP Remote Desktop" ;;
+        111) echo "RPC Service" ;;
+        139|445) echo "Samba/SMB File Sharing" ;;
+        *) 
+            # If port isn't known → fallback to process name
+            case "$process" in
+                sshd) echo "SSH Server" ;;
+                cupsd) echo "Print Spooler" ;;
+                dnsmasq) echo "DNS/DHCP" ;;
+                apache2|nginx|lighttpd) echo "Web Server" ;;
+                mysqld) echo "Database Server" ;;
+                *) echo "Unknown/Unclassified" ;;
+            esac
+        ;;
+    esac
+}
+
+applyBaselinePolicy() { # holy moly!
     echo -e "${MAGENTA}[+]${RESET} Starting hardening.."
 
     # Helpers
@@ -266,215 +709,6 @@ applyBaselinePolicy() {
     echo -e "${MAGENTA}[+]${RESET} Baseline hardening complete."
     read -p "Finished! Press enter..."
 }
-
-manageUsers() {
-    while true; do
-        clear
-        echo -e "${MAGENTA}---------= User Management =---------${RESET}"
-        echo -e "${MAGENTA}[1]${RESET} Delete User"
-        echo -e "${MAGENTA}[2]${RESET} Add User"
-        echo -e "${MAGENTA}[3]${RESET} Make Administrator"
-        echo -e "${MAGENTA}[4]${RESET} Remove Administrator"
-        echo -e "${MAGENTA}[5]${RESET} Disable User"
-        echo -e "${MAGENTA}[6]${RESET} Enable User"
-        echo -e "${MAGENTA}[7]${RESET} Reset Password"
-        echo -e "${MAGENTA}[8]${RESET} Make Passwords Expirable"
-        echo -e "${MAGENTA}[0]${RESET} Back -> Main Menu"
-        echo -e "${MAGENTA}[?]${RESET} Users:"
-        echo ""
-
-        printUsers
-
-        echo ""
-        echo -e "${MAGENTA}-------------------------------------${RESET}"
-
-        read -p "Select option: " u
-        case "$u" in
-            1) deleteUser ;;
-            2) addUser ;;
-            3) makeAdmin ;;
-            4) removeAdmin ;;
-            5) disableUser ;;
-            6) enableUser ;;
-            7) resetUserPassword ;;
-            8) expirePasswords ;;
-            0) return ;;
-        esac
-    done
-}
-searchByExtension() {
-    clear
-    echo -e "${MAGENTA}-----------= File Search =-----------${RESET}"
-    echo -e "${MAGENTA}[0]${RESET} Back -> Main Menu"
-    read -p "Enter file extension (example: mp3, py, sh, jpg): " ext
-    [[ "$ext" == "0" ]] && showMainMenu
-    [[ -z "$ext" ]] && { echo "No extension entered."; read -p "Press enter..."; searchByExtension }
-
-    echo -e "${MAGENTA}[+]${RESET} Searching entire system for *.$ext ..."
-    echo ""
-
-    find / \
-        -path /proc -prune -o \
-        -path /sys -prune -o \
-        -path /run -prune -o \
-        -path /dev -prune -o \
-        -type f -iname "*.$ext" -print 2>/dev/null
-
-    echo ""
-    echo -e "${MAGENTA}[+]${RESET} Search complete."
-    read -p "Press enter to continue..."
-}
-Credits() {
-    clear
-    echo -e "${MAGENTA}---------= User Management =---------${RESET}"
-    echo -e "${MAGENTA}[+]${RESET} Github ( VeryCuteLookingCat ) - Helped with UI"
-    echo -e "https://github.com/veryCuteLookingCat"
-    echo -e "${MAGENTA}[+]${RESET} My Cat - Wrote entire backend"
-    echo -e "N/A"
-    echo -e "${MAGENTA}-------------------------------------${RESET}"
-    read -p "Yaaaay ( Enter to Return ) "
-}
-printUsers() {
-    users=$(awk -F: '$3 >= 1000 {print $1}' /etc/passwd)
-
-    echo ""
-    for user in $users; do
-        tags=()
-
-        if id -nG "$user" | grep -Eq "(sudo|adm)"; then
-            tags+=("Elevated")
-        fi
-
-        shadow=$(grep "^$user:" /etc/shadow)
-        pwField=$(echo "$shadow" | cut -d: -f2)
-
-        if [[ $pwField == '!'* ]] || [[ $pwField == '*' ]]; then
-            tags+=("Disabled")
-        fi
-
-        expireField=$(echo "$shadow" | cut -d: -f5)
-        if [[ $expireField -eq -1 ]]; then
-            tags+=("Password Never Expires")
-        fi
-
-        minDays=$(echo "$shadow" | cut -d: -f4)
-        if [[ $minDays -ge 99999 ]]; then
-            tags+=("Cannot Change Password")
-        fi
-
-        status=$(passwd -S "$user" | awk '{print $2}')
-        if [[ $status == "L" ]]; then
-            tags+=("Account Locked")
-        fi
-
-        if [[ ${#tags[@]} -eq 0 ]]; then
-            echo "$user = No Flags"
-        else
-            echo "$user = ${tags[*]}"
-        fi
-    done
-    echo ""
-}
-deleteUser() {
-    read -p "Enter username to delete (0 to cancel): " u
-    [[ "$u" == "0" ]] && return
-    if id "$u" &>/dev/null; then
-        sudo deluser "$u"
-        read -p "User deleted. Press enter..."
-    else
-        read -p "User not found. Press enter..."
-        deleteUser
-    fi
-}
-addUser() {
-    read -p "Enter new username (0 to cancel): " u
-    [[ "$u" == "0" ]] && return
-
-    password=$(openssl rand -base64 12)
-    sudo adduser --disabled-password --gecos "" "$u"
-    echo "$u:$password" | sudo chpasswd
-
-    echo "Created user: $u"
-    echo "Password: $password"
-    read -p "Press enter..."
-}
-makeAdmin() {
-    read -p "Enter username: " u
-    if id "$u" &>/dev/null; then
-        sudo usermod -aG sudo "$u"
-        echo "$u is now admin."
-        read -p "Press enter..."
-    else
-        read -p "User not found. Press enter..."
-        makeAdmin
-    fi
-}
-removeAdmin() {
-    read -p "Enter username: " u
-    if id "$u" &>/dev/null; then
-        sudo deluser "$u" sudo
-        echo "$u is no longer admin."
-        read -p "Press enter..."
-    else
-        read -p "User not found. Press enter..."
-        removeAdmin
-    fi
-}
-disableUser() {
-    read -p "Enter username: " u
-    if id "$u" &>/dev/null; then
-        sudo usermod -L "$u"
-        echo "Disabled $u"
-        read -p "Press enter..."
-    else
-        read -p "User not found. Press enter..."
-        disableUser
-    fi
-}
-enableUser() {
-    read -p "Enter username: " u
-    if id "$u" &>/dev/null; then
-        sudo usermod -U "$u"
-        echo "Enabled $u"
-        read -p "Press enter..."
-    else
-        read -p "User not found. Press enter..."
-        enableUser
-    fi
-}
-
-generateSecurePassword() {
-    local upper=$(tr -dc 'A-Z' </dev/urandom | head -c 1)
-    local lower=$(tr -dc 'a-z' </dev/urandom | head -c 1)
-    local digit=$(tr -dc '0-9' </dev/urandom | head -c 1)
-    local special=$(tr -dc '!@#$%^&*()_+=-{}[]:;<>?,.' </dev/urandom | head -c 1)
-    local rest=$(tr -dc 'A-Za-z0-9!@#$%^&*()_+=-{}[]:;<>?,.' </dev/urandom | head -c 8)
-
-    echo "$upper$lower$digit$special$rest" | fold -w1 | shuf | tr -d '\n'
-    echo
-}
-
-resetUserPassword() {
-    read -p "Enter username: " u
-    if id "$u" &>/dev/null; then
-        password=$(generateSecurePassword)
-        echo "$u:$password" | chpasswd
-        echo "New password for $u: $password"
-        read -p "Press enter..."
-    else
-        read -p "User not found. Press enter..."
-        resetUserPassword
-    fi
-}
-expirePasswords() {
-    for u in $(awk -F: '$3 >= 1000 {print $1}' /etc/passwd); do
-        sudo chage -M 90 "$u"
-    done
-    echo "All users now have expiring passwords."
-    read -p "Press enter..."
-}
-
-
 
 
 showMainMenu
