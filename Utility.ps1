@@ -33,15 +33,31 @@ function showMainMenu {
     }
 }
 function randomStr {
-    param (
-        [int]$Length = 12,
-        [string]$Characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?.'
+    param(
+        [int]$length = 12
     )
 
-    $charArray = $Characters.ToCharArray()
-    $RandomString = -join (0..($Length - 1) | ForEach-Object { Get-Random -InputObject $charArray })
-    return $RandomString
+    $lower = 'abcdefghijklmnopqrstuvwxyz'
+    $upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    $digit = '0123456789'
+    $symbol = '!@#$%^&*()-_=+?'
+
+    $mandatory = @(
+        $lower[(Get-Random -Max $lower.Length)]
+        $upper[(Get-Random -Max $upper.Length)]
+        $digit[(Get-Random -Max $digit.Length)]
+        $symbol[(Get-Random -Max $symbol.Length)]
+    )
+
+    $all = ($lower + $upper + $digit + $symbol).ToCharArray()
+
+    $remaining = for ($i = 0; $i -lt ($length - 4); $i++) {
+        $all[(Get-Random -Max $all.Length)]
+    }
+
+    -join ($mandatory + $remaining | Sort-Object {Get-Random})
 }
+
 
 
 function manageUsers {# to do: Reset Password, Add tag if user doesn't have password
@@ -92,6 +108,17 @@ function userRightsAssignments {
         write-host ""
         printUserAssignments
         write-host ""
+        write-host "[?] Checklist (Verify Manually in Secpol.msc):" -ForegroundColor Magenta
+        write-host "[ ] Guests denied local logon (SeDenyInteractiveLogonRight)"
+        write-host "[ ] Guests denied remote logon (SeDenyRemoteInteractiveLogonRight)"
+        write-host "[ ] Only Administrators have SeDebugPrivilege"
+        write-host "[ ] Only Administrators have Backup/Restore privileges"
+        write-host "[ ] RDP Logon (SeRemoteInteractiveLogonRight) only allowed for Admins + Remote Desktop Users"
+        write-host "[ ] Service Logon (SeServiceLogonRight) only used by actual service accounts"
+        write-host "[ ] Batch Logon (SeBatchLogonRight) is empty"
+        write-host "[ ] No unknown or random SIDs assigned to ANY privilege"
+        write-host ""
+
         write-host "------------------------------------" -ForegroundColor Magenta
 
         $choice = read-Host "Select option"
@@ -274,7 +301,13 @@ function Credits {
 }
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Baseline security
-
+function safeDisableService($name) {
+    $svc = Get-Service -Name $name -ErrorAction SilentlyContinue
+    if ($svc) {
+        Set-Service -Name $name -StartupType Disabled
+        Stop-Service -Name $name -Force
+    }
+}
 function applyBaselinePolicy {
 
     clear-Host
@@ -367,47 +400,47 @@ function applyBaselinePolicy {
     gpupdate /force | Out-Null
     write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Imported Securit Policy's"
 
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\RemoteRegistry" -Name "Start" -Value 4
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "AllowInsecureGuestAuth" -Value 0
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\NetBT\Parameters" -Name "NodeType" -Value 2
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "SMB1" -Value 0
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile\Logging" -Name "LogDroppedPackets" -Value 1
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile\Logging" -Name "LogSuccessfulConnections" -Value 1
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "AutoShareWks" -Value 0
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" -Name "DisabledComponents" -Value 0xFF
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Remote Assistance" -Name "fAllowToGetHelp" -Value 0
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Remote Assistance" -Name "fAllowFullControl" -Value 0    
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" -Name "RunAsPPL" -Value 1
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" -Name "NoLMHash" -Value 1
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" -Name "DisableDomainCreds " -Value 1
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" -Name "DisableAnonymousSIDNameTranslation" -Value 1
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0" -Name "RestrictReceivingNTLMTraffic" -Value 1
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "RequireSecuritySignature" -Value 1
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "RequireSecuritySignature" -Value 1
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "RestrictNullSessAccess" -Value 1
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "AllowInsecureGuestAuth" -Value 0
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server" -Name Enabled -Value 0
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server" -Name Enabled -Value 0
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "MinEncryptionLevel" -Value 3
-    Set-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1
-    Set-ItemProperty -Path "HKLM\Software\Microsoft\Windows\CurrentVersion\Explorer" -Name "SmartScreenEnabled" -Value "RequireAdmin"
-    Set-ItemProperty -Path "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Value 255
-    Set-ItemProperty -Path "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoAutorun" -Value 1
-    Set-ItemProperty -Path "HKLM\Software\Microsoft\Windows Script Host\Settings" -Name "Enabled" -Value 0
-    Set-ItemProperty -Path "HKLM\Software\Policies\Microsoft\Windows NT\Terminal Services" -Name "fDisableClipboardRedirection" -Value 1
-    Set-ItemProperty -Path "HKLM\Software\Policies\Microsoft\Windows NT\DNSClient" -Name "EnableMulticast" -Value 0
-    Set-ItemProperty -Path "HKLM\Software\Policies\Microsoft\Windows\PowerShell" -Name "ExecutionPolicy" -Value "Restricted"
-    Set-ItemProperty -Path "HKLM\Software\Policies\Microsoft\Windows\PowerShell" -Name "EnableScripts" -Value 0
-    Set-ItemProperty -Path "HKLM\Software\Policies\Microsoft Services\AdmPwd" -Name "AdmPwdEnabled" -Value 1
-    Set-ItemProperty -Path "HKLM\Software\Policies\Microsoft Services\AdmPwd" -Name "PasswordComplexity" -Value 4
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\RemoteRegistry" -Name "Start" -Value 4
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "AllowInsecureGuestAuth" -Value 0
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\NetBT\Parameters" -Name "NodeType" -Value 2
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "SMB1" -Value 0
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile\Logging" -Name "LogDroppedPackets" -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile\Logging" -Name "LogSuccessfulConnections" -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "AutoShareWks" -Value 0
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" -Name "DisabledComponents" -Value 0xFF
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Remote Assistance" -Name "fAllowToGetHelp" -Value 0
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Remote Assistance" -Name "fAllowFullControl" -Value 0    
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa" -Name "RunAsPPL" -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa" -Name "NoLMHash" -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa" -Name "DisableDomainCreds " -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa" -Name "DisableAnonymousSIDNameTranslation" -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0" -Name "RestrictReceivingNTLMTraffic" -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "RequireSecuritySignature" -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "RequireSecuritySignature" -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "RestrictNullSessAccess" -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "AllowInsecureGuestAuth" -Value 0
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server" -Name Enabled -Value 0
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Server" -Name Enabled -Value 0
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "MinEncryptionLevel" -Value 3
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Explorer" -Name "SmartScreenEnabled" -Value "RequireAdmin"
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Value 255
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoAutorun" -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows Script Host\Settings" -Name "Enabled" -Value 0
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" -Name "fDisableClipboardRedirection" -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\DNSClient" -Name "EnableMulticast" -Value 0
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows\PowerShell" -Name "ExecutionPolicy" -Value "Restricted"
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows\PowerShell" -Name "EnableScripts" -Value 0
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\Software\Policies\Microsoft Services\AdmPwd" -Name "AdmPwdEnabled" -Value 1
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\Software\Policies\Microsoft Services\AdmPwd" -Name "PasswordComplexity" -Value 4
 
 
-    New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 2.0\Server" -Force | Out-Null
-    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 2.0\Server" -Name Enabled -Value 0
+    New-Item -Path "Registry::HKEY_LOCAL_MACHINE:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 2.0\Server" -Force | Out-Null
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 2.0\Server" -Name Enabled -Value 0
 
-    New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 3.0\Server" -Force | Out-Null
-    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 3.0\Server" -Name Enabled -Value 0
+    New-Item -Path "Registry::HKEY_LOCAL_MACHINE:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 3.0\Server" -Force | Out-Null
+    Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 3.0\Server" -Name Enabled -Value 0
 
 
     write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Modified Registry"
@@ -435,53 +468,40 @@ function applyBaselinePolicy {
 
     Disable-PSRemoting -Force
     winrm delete winrm/config/Listener?Address=*+Transport=HTTP 2>$null
-    Set-Service -Name "WinRM" -StartupType Disabled
-    Stop-Service -Name "WinRM" -Force
-
-    Set-Service -Name "RemoteAccess" -StartupType Disabled
-    Stop-Service -Name "RemoteAccess" -Force
-    
-    Set-Service -Name "SNMP" -StartupType Disabled
-    Stop-Service -Name "SNMP" -Force
-    
-    Set-Service -Name "Telnet" -StartupType Disabled
-    Stop-Service -Name "Telnet" -Force
-    
-    Set-Service -Name "BTAGService" -StartupType Disabled
-    Stop-Service -Name "BTAGService" -Force
-    
-    Set-Service -Name "bthserv" -StartupType Disabled
-    Stop-Service -Name "bthserv" -Force
-    
-    Set-Service -Name "PeerDistSvc" -StartupType Disabled 
-    Stop-Service -Name "PeerDistSvc" -Force
-    
-    Set-Service -Name "Spooler" -StartupType Disabled
-    Stop-Service -Name "Spooler" -Force
-
-    Set-Service -Name "SessionEnv" -StartupType Disabled
-    Stop-Service -Name "SessionEnv" -Force
-
-    Set-Service -Name "WDSServer" -StartupType Disabled
-    Stop-Service -Name "WDSServer" -Force
-
-    Set-Service -Name "vmicguestinterface" -StartupType Disabled
-    Set-Service -Name "vmicshutdown" -StartupType Disabled
-    Set-Service -Name "vmicheartbeat" -StartupType Disabled
+    safeDisableService "WinRM"
+    safeDisableService "RemoteAccess"
+    safeDisableService "SNMP"
+    safeDisableService "Telnet"
+    safeDisableService "BTAGService"
+    safeDisableService "bthserv"
+    safeDisableService "PeerDistSvc"
+    safeDisableService "Spooler"
+    safeDisableService "SessionEnv"
+    safeDisableService "WDSServer"
+    safeDisableService "vmicguestinterface"
+    safeDisableService "vmicshutdown"
+    safeDisableService "vmicheartbeat"
 
 
 
     write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Disabled useless services's"
     
-    Set-SmbClientConfiguration -EnableSMB1Protocol $false -Force
-    dnscmd /config /NoRecursion 1 2>$null
+    if (Get-Command Set-SmbClientConfiguration -ErrorAction SilentlyContinue) {
+        Set-SmbClientConfiguration -EnableSMB1Protocol $false -Force
+    }
+    if (Get-Command dnscmd.exe -ErrorAction SilentlyContinue) {
+        dnscmd /config /NoRecursion 1 2>$null
+    }
     Set-MpPreference -DisableRealtimeMonitoring $false
     Set-MpPreference -DisableIOAVProtection $false
     Set-MpPreference -DisableScriptScanning $false
     Set-MpPreference -MAPSReporting 2
     Set-MpPreference -SubmitSamplesConsent 2
     write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Disabled useless services's"
-    Remove-LocalGroupMember -Group "Guests" -Member "guest-disabled"
+    try {
+        Remove-LocalGroupMember -Group "Guests" -Member "guest-disabled" -ErrorAction Stop
+    } catch {}
+
 
 
     write-host "[+]" -ForegroundColor Magenta -NoNewline; write-host " Basline Security Applied!"
