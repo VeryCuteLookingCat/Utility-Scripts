@@ -20,6 +20,11 @@ A simplified but highly portable administrative helper for Ubuntu based systems.
 Features:
 Feature | Information
 --- | --- 
+Apply baseline hardening | Applies enhanced security options to harden linux systems. 
 Manage user accounts | Automates user creation, removal, privilege adjustments, and group assignment with built-in validation for safe system changes.
-
-
+System Wide Search | Searche the entire system for a specified extension.
+Program Utilities | Lists user-installed and suspicious programs, view full package list, and delete a specified program.
+Port List | List all open ports with detailed information on the program running it.
+Service Manager | View running and on-boot services, stop, disable, start and enable functionality for each service.
+Startup Audit | View Cron jobs, systemd startup services, user autostart and list suspicious startup scripts.
+Security Dashboard | View detailed information about the system such as users, sudo users, services, startups, firewall status and pending updates.
