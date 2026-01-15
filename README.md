@@ -1,30 +1,16 @@
-# Utility Scripts
-Cross-platform administrative tooling for Windows and Linux environments. Designed for small and medium organizations that need fast, repeatable, and secure local machine configuration.
+# Utility Tooling (Windows & Linux)
 
-These scripts were built with real world IT workflows in mind: Onboard/Offboarding users, Auditing local policy, Verifying system integrity and applying basline hardening without requiring management tools lime Intune, Puppet or AD Group Policy.
+Standalone security operations tooling for unmanaged or incident response environments.
+Designed for rapid auditing, hardening, and local policy inspection without reliance on centralized management (AD, Intune, Puppet).
 
-## Utility.ps1
-A modular Powershell toolset focused on local security posture, user management, and administrative QOL tasks.
+## Windows (PowerShell):
+- Programmatic inspection of Local Security Policy and user rights assignments (e.g., SeDebugPrivilege, SeBackupPrivilege)
+- Automated application of hardened baseline security configurations with full rollback support
+- Local account enumeration and privilege auditing for least-privilege violations
+- File hashing utilities for integrity verification during forensic workflows
 
-Features:
-Feature | Information
---- | --- 
-Baseline security policy (auto) | Applies a curated set of recommended Local Security Options to harden standalone Windows systems. Fully script-driven, repeatable, and reversible.
-Manage user accounts | Enumerates, creates, disables, and audits local accounts with strict validation and error handling.
-User rights assignments | Retrieves and displays privilege assignments (e.g., SeBackupPrivilege, SeDebugPrivilege) using programmatic inspection of local policy. Useful for auditing principle-of-least-privilege violations.
-Hashing Utility | Provides rapid hashing of any file using multiple algorithms for integrity checks during incident response or forensic analysis.
-
-
-## Utility.sh
-A simplified but highly portable administrative helper for Ubuntu based systems.
-Features:
-Feature | Information
---- | --- 
-Apply baseline hardening | Applies enhanced security options to harden linux systems. 
-Manage user accounts | Automates user creation, removal, privilege adjustments, and group assignment with built-in validation for safe system changes.
-System Wide Search | Searche the entire system for a specified extension.
-Program Utilities | Lists user-installed and suspicious programs, view full package list, and delete a specified program.
-Port List | List all open ports with detailed information on the program running it.
-Service Manager | View running and on-boot services, stop, disable, start and enable functionality for each service.
-Startup Audit | View Cron jobs, systemd startup services, user autostart and list suspicious startup scripts.
-Security Dashboard | View detailed information about the system such as users, sudo users, services, startups, firewall status and pending updates.
+## Linux (Bash):
+- Baseline system hardening for Ubuntu-based hosts
+- Comprehensive startup persistence audit (cron, systemd, user autostart)
+- Open port and service inspection mapped to owning processes
+- Security posture dashboard (users, sudo access, services, firewall, updates)
